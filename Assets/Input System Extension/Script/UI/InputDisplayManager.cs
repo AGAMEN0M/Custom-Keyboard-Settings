@@ -11,7 +11,6 @@
 
 using System.Collections.Generic;
 using UnityEngine.InputSystem;
-using InputSystemExtension;
 using System.Collections;
 using UnityEngine.UI;
 using UnityEngine;
@@ -20,906 +19,914 @@ using System;
 
 using static UnityEngine.InputSystem.InputSystem;
 
-[AddComponentMenu("UI/Input System Extension/Display/Input Display Manager", 1)]
-public class InputDisplayManager : MonoBehaviour
+namespace InputSystemExtension
 {
-    #region === Enums ===
-
-    /// <summary>
-    /// Defines the type of input control being used.
-    /// </summary>
-    public enum ControlType
+    [AddComponentMenu("Tools/Input System Extension/UI/Display/Input Display Manager")]
+    public class InputDisplayManager : MonoBehaviour
     {
-        Keyboard,  // Represents keyboard-based input.
-        Gamepad    // Represents gamepad-based input.
-    }
+        #region === Enums ===
 
-    #endregion
-    
-    #region === Serializable Classes ===
+        /// <summary>
+        /// Defines the type of input control being used.
+        /// </summary>
+        public enum ControlType
+        {
+            /// <summary>Represents keyboard-based input.</summary>
+            Keyboard,
 
-    /// <summary>
-    /// Class that defines data for a single input viewer.
-    /// Used to display one input icon and handle its corresponding events.
-    /// </summary>
-    [Serializable]
-    public class InputViewerData
-    {
-        [Tooltip("Identifier for this viewer entry.")]
-        public string nameTag; // Unique tag used to identify this specific viewer.
+            /// <summary>Represents gamepad-based input.</summary>
+            Gamepad
+        }
 
-        [Tooltip("Determines whether this input view is active.")]
-        public bool enable; // Enables or disables this viewer instance.
+        #endregion
+
+        #region === Serializable Struct ===
+
+        /// <summary>
+        /// Struct that defines data for a single input viewer.
+        /// Used to display one input icon and handle its corresponding events.
+        /// </summary>
+        [Serializable]
+        public struct InputViewerData
+        {
+            [Tooltip("Identifier for this viewer entry.")]
+            public string nameTag;
+
+            [Tooltip("Determines whether this input view is active.")]
+            public bool enable;
+
+            [Space(10)]
+
+            [GetAction, Tooltip("Reference to the Input Action asset.")]
+            public InputActionReference inputActionReference;
+
+            [BindingId(nameof(inputActionReference)), Tooltip("Binding identifier for keyboard input.")]
+            public string keyboardId;
+
+            [BindingId(nameof(inputActionReference)), Tooltip("Binding identifier for gamepad input.")]
+            public string gamepadId;
+
+            [Space(10)]
+
+            [Tooltip("UI Image component used to display the input icon.")]
+            public Image inputIcon;
+
+            [NonSerialized, Tooltip("Input event handler for float input types (e.g., button press).")]
+            public OnInputSystemEventConfig<float> inputEvent;
+        }
+
+        /// <summary>
+        /// Struct that defines data for multiple input directions (Up, Down, Left, Right).
+        /// Used to handle directional inputs such as D-Pad or Arrow Keys.
+        /// </summary>
+        [Serializable]
+        public struct InputMultipleViewsData
+        {
+            [Tooltip("Identifier for this directional input viewer.")]
+            public string nameTag;
+
+            [Tooltip("Determines whether this input view set is active.")]
+            public bool enable;
+
+            [Space(10)]
+
+            [GetAction, Tooltip("Reference to the Input Action asset.")]
+            public InputActionReference inputActionReference;
+
+            [BindingId(nameof(inputActionReference)), Tooltip("Binding identifier for keyboard input.")]
+            public string keyboardId;
+
+            [BindingId(nameof(inputActionReference)), Tooltip("Binding identifier for gamepad input.")]
+            public string gamepadId;
+
+            [Space(10)]
+
+            [Tooltip("Icon representing the 'Up' input direction.")]
+            public Image inputIconUp;
+
+            [Tooltip("Icon representing the 'Down' input direction.")]
+            public Image inputIconDown;
+
+            [Tooltip("Icon representing the 'Left' input direction.")]
+            public Image inputIconLeft;
+
+            [Tooltip("Icon representing the 'Right' input direction.")]
+            public Image inputIconRight;
+
+            [NonSerialized, Tooltip("Input event handler for Vector2 input types (e.g., movement stick or D-Pad).")]
+            public OnInputSystemEventConfig<Vector2> inputEvent;
+        }
+
+        #endregion
+
+        #region === Inspector Fields ===
+
+        [Header("Auto Detection Settings")]
+        [SerializeField, Tooltip("If true, control type (Keyboard or Gamepad) will be automatically detected at runtime.")]
+        private bool automatic = true;
+
+        [SerializeField, Tooltip("Default control type when automatic detection is disabled.")]
+        private ControlType controlType = ControlType.Keyboard;
+
+        [Header("Input Visual Settings")]
+        [SerializeField, Tooltip("Color applied when an input is active (pressed).")]
+        private Color activatedColor = Color.white;
+
+        [SerializeField, Tooltip("Color applied when an input is inactive or released.")]
+        private Color disabledColor = Color.gray;
 
         [Space(10)]
 
-        [GetAction, Tooltip("Reference to the Input Action asset.")]
-        public InputActionReference inputActionReference; // Input action linked to this viewer.
+        [SerializeField, Tooltip("Duration of the color transition when input state changes.")]
+        private float transitionTime = 0.1f;
 
-        // Binding identifiers used to select the correct input icon based on control type.
-        [BindingId(nameof(inputActionReference)), Tooltip("Binding identifier for keyboard input.")]
-        public string keyboardId;
+        [SerializeField, Tooltip("Duration of the fade-out effect when hiding a viewer.")]
+        private float hideTransitionTime = 0.5f;
 
-        [BindingId(nameof(inputActionReference)), Tooltip("Binding identifier for gamepad input.")]
-        public string gamepadId;
+        [Header("Input Viewer Data")]
+        [SerializeField, Tooltip("List of single input viewers (e.g., jump button).")]
+        private List<InputViewerData> inputViewerData = new();
 
-        [Space(10)]
+        [SerializeField, Tooltip("List of directional input viewers (e.g., movement arrows or joystick directions).")]
+        private List<InputMultipleViewsData> inputMultipleViewsData = new();
 
-        [Tooltip("UI Image component used to display the input icon.")]
-        public Image inputIcon; // Image component that displays the assigned control icon.
+        #endregion
 
-        [NonSerialized, Tooltip("Input event handler for float input types (e.g., button press).")]
-        public OnInputSystemEventConfig<float> inputEvent; // Event configuration for single-axis input (button actions).
-    }
+        #region === Private Fields ===
 
-    /// <summary>
-    /// Struct that defines data for multiple input directions (Up, Down, Left, Right).
-    /// Used to handle directional inputs such as D-Pad or Arrow Keys.
-    /// </summary>
-    [Serializable]
-    public struct InputMultipleViewsData
-    {
-        [Tooltip("Identifier for this directional input viewer.")]
-        public string nameTag; // Unique tag used to identify this directional viewer.
+        /// <summary>
+        /// Cached reference to the extension data containing sprites and input mappings.
+        /// Used to retrieve appropriate icons based on control type and bindings.
+        /// </summary>
+        private InputSystemExtensionData extensionData;
 
-        [Tooltip("Determines whether this input view set is active.")]
-        public bool enable; // Enables or disables this directional viewer.
+        /// <summary>
+        /// Stores active color transition coroutines for each image.
+        /// This ensures that multiple transitions on the same image don't overlap.
+        /// </summary>
+        private readonly Dictionary<Image, Coroutine> colorTransitions = new();
 
-        [Space(10)]
+        #endregion
 
-        [GetAction, Tooltip("Reference to the Input Action asset.")]
-        public InputActionReference inputActionReference; // Input action associated with this directional set.
+        #region === Public Properties ===
 
-        // Binding identifiers used to select the correct input icon based on control type.
-        [BindingId(nameof(inputActionReference)), Tooltip("Binding identifier for keyboard input.")]
-        public string keyboardId;
-
-        [BindingId(nameof(inputActionReference)), Tooltip("Binding identifier for gamepad input.")]
-        public string gamepadId;
-
-        [Space(10)]
-
-        [Tooltip("Icon representing the 'Up' input direction.")]
-        public Image inputIconUp;
-
-        [Tooltip("Icon representing the 'Down' input direction.")]
-        public Image inputIconDown;
-
-        [Tooltip("Icon representing the 'Left' input direction.")]
-        public Image inputIconLeft;
-
-        [Tooltip("Icon representing the 'Right' input direction.")]
-        public Image inputIconRight;
-
-        [NonSerialized, Tooltip("Input event handler for Vector2 input types (e.g., movement stick or D-Pad).")]
-        public OnInputSystemEventConfig<Vector2> inputEvent; // Event configuration for 2D input vectors.
-    }
-
-    #endregion
-
-    #region === Inspector Fields ===
-
-    [Header("Auto Detection Settings")]
-    [SerializeField, Tooltip("If true, control type (Keyboard or Gamepad) will be automatically detected at runtime.")]
-    private bool automatic = true; // Enables automatic detection of input device type.
-
-    [SerializeField, Tooltip("Default control type when automatic detection is disabled.")]
-    private ControlType controlType = ControlType.Keyboard; // Manually selected control type.
-
-    [Header("Input Visual Settings")]
-    [SerializeField, Tooltip("Color applied when an input is active (pressed).")]
-    private Color activatedColor = Color.white; // Color used for active input visuals.
-
-    [SerializeField, Tooltip("Color applied when an input is inactive or released.")]
-    private Color disabledColor = Color.gray; // Color used for inactive input visuals.
-
-    [Space(10)]
-
-    [SerializeField, Tooltip("Duration of the color transition when input state changes.")]
-    private float transitionTime = 0.1f; // Duration for fade or transition effects between input states.
-
-    [SerializeField, Tooltip("Duration of the fade-out effect when hiding a viewer.")]
-    private float hideTransitionTime = 0.5f; // Fade-out time when disabling input display elements.
-
-    [Header("Input Viewer Data")]
-    [SerializeField, Tooltip("List of single input viewers (e.g., jump button).")]
-    private List<InputViewerData> inputViewerData = new(); // Collection of single input data configurations.
-
-    [SerializeField, Tooltip("List of directional input viewers (e.g., movement arrows or joystick directions).")]
-    private List<InputMultipleViewsData> inputMultipleViewsData = new(); // Collection of multi-directional input data configurations.
-
-    #endregion
-
-    #region === Private Fields ===
-
-    // Cached reference to the extension data containing sprites and input mappings.
-    // Used to retrieve appropriate icons based on control type and bindings.
-    private InputSystemExtensionData extensionData;
-
-    // Stores active color transition coroutines for each image.
-    // This ensures that multiple transitions on the same image don't overlap.
-    private readonly Dictionary<Image, Coroutine> colorTransitions = new();
-
-    #endregion
-
-    #region === Public Properties ===
-
-    /// <summary>
-    /// Enables or disables automatic control type detection.
-    /// </summary>
-    public bool SetAutomatic
-    {
-        get => automatic;
-        set => automatic = value;
-    }
-
-    /// <summary>
-    /// Sets or gets the current control type (Keyboard or Gamepad).
-    /// When set manually, it also updates the input icons accordingly.
-    /// </summary>
-    public ControlType SetControlType
-    {
-        get => controlType;
-        set
+        /// <summary>
+        /// Enables or disables automatic control type detection.
+        /// </summary>
+        public bool SetAutomatic
         {
-            // Update control type and refresh icons only if the value changed.
-            if (controlType != value)
-            {
-                controlType = value;
-                UpdateIcons(); // Refresh icons to match the new control type.
-            }
-        }
-    }
-
-    /// <summary>
-    /// Gets or sets the list of input viewer data (single input).
-    /// This is mainly used for editor access or dynamic modification.
-    /// </summary>
-    public List<InputViewerData> InputViewerDataEditor
-    {
-        get => inputViewerData;
-        set => inputViewerData = value;
-    }
-
-    /// <summary>
-    /// Gets or sets the list of directional input data.
-    /// Useful for editor editing or runtime configuration.
-    /// </summary>
-    public List<InputMultipleViewsData> InputMultipleViewsDataEditor
-    {
-        get => inputMultipleViewsData;
-        set => inputMultipleViewsData = value;
-    }
-
-    #endregion
-
-    #region === Unity Events ===
-
-    /// <summary>
-    /// Called before Start(). Validates the input data to ensure all fields are properly assigned.
-    /// </summary>
-    private void Awake() => ValidateData(); // Perform initial validation on serialized input lists.
-
-    /// <summary>
-    /// Called when the GameObject is enabled. Registers device change listeners and updates icons.
-    /// </summary>
-    private void OnEnable()
-    {
-        if (automatic) DetectControlType(); // Automatically determine the control type based on connected devices.
-        onDeviceChange += OnDeviceChange; // Subscribe to device change events.
-        InitializeInputViewerData(); // Setup event handlers for single input icons.
-        InitializeInputMultipleViewsData(); // Setup event handlers for directional inputs.
-        UpdateIcons(); // Apply appropriate sprites to icons based on current control type.
-    }
-
-    /// <summary>
-    /// Called when the GameObject is disabled. Triggers cleanup to stop coroutines and unbind events.
-    /// </summary>
-    private void OnDisable() => OnClean();
-
-    /// <summary>
-    /// Called when the GameObject is destroyed. Ensures cleanup is performed as a final safeguard.
-    /// </summary>
-    private void OnDestroy() => OnClean();
-
-    #endregion
-
-    #region === Validation ===
-
-    /// <summary>
-    /// Validates all serialized input data to ensure required fields are assigned correctly.
-    /// Logs errors in the console if any issues are found.
-    /// </summary>
-    private void ValidateData()
-    {
-        bool hasError = false;
-
-        // Validate each InputViewerData entry.
-        for (int i = 0; i < inputViewerData.Count; i++)
-        {
-            var data = inputViewerData[i];
-
-            // Check if the name tag is assigned.
-            if (string.IsNullOrWhiteSpace(data.nameTag))
-            {
-                Debug.LogError($"[InputDisplayManager] InputViewerData at index {i} is missing a nameTag.", this);
-                hasError = true;
-            }
-
-            // Check if the InputActionReference is assigned.
-            if (data.inputActionReference == null)
-            {
-                Debug.LogError($"[InputDisplayManager] InputViewerData '{data.nameTag}' is missing an InputActionReference.", this);
-                hasError = true;
-            }
-
-            // Check if the inputIcon (UI image) is assigned.
-            if (data.inputIcon == null)
-            {
-                Debug.LogError($"[InputDisplayManager] InputViewerData '{data.nameTag}' is missing an InputIcon Image reference.", this);
-                hasError = true;
-            }
+            get => automatic;
+            set => automatic = value;
         }
 
-        // Validate each InputMultipleViewsData entry.
-        for (int i = 0; i < inputMultipleViewsData.Count; i++)
+        /// <summary>
+        /// Sets or gets the current control type (Keyboard or Gamepad).
+        /// When set manually, it also updates the input icons accordingly.
+        /// </summary>
+        public ControlType SetControlType
         {
-            var data = inputMultipleViewsData[i];
-
-            // Check if the name tag is assigned.
-            if (string.IsNullOrWhiteSpace(data.nameTag))
+            get => controlType;
+            set
             {
-                Debug.LogError($"[InputDisplayManager] InputMultipleViewsData at index {i} is missing a nameTag.", this);
-                hasError = true;
-            }
-
-            // Check if the InputActionReference is assigned.
-            if (data.inputActionReference == null)
-            {
-                Debug.LogError($"[InputDisplayManager] InputMultipleViewsData '{data.nameTag}' is missing an InputActionReference.", this);
-                hasError = true;
-            }
-
-            // Check if all directional icons are assigned.
-            if (data.inputIconUp == null || data.inputIconDown == null || data.inputIconLeft == null || data.inputIconRight == null)
-            {
-                Debug.LogError($"[InputDisplayManager] InputMultipleViewsData '{data.nameTag}' is missing one or more direction icons.", this);
-                hasError = true;
-            }
-        }
-
-        // If no errors were found, log a success message.
-        if (!hasError)
-        {
-            Debug.Log("[InputDisplayManager] Initialization check passed.", this);
-        }
-    }
-
-    #endregion
-
-    #region === Initialization Helpers ===
-
-    /// <summary>
-    /// Initializes the input event bindings and icon states for single input viewers.
-    /// Sets up event handlers to respond to input press and release.
-    /// </summary>
-    private void InitializeInputViewerData()
-    {
-        for (int i = 0; i < inputViewerData.Count; i++)
-        {
-            var data = inputViewerData[i];
-
-            // Skip if the referenced InputAction is not assigned.
-            if (data.inputActionReference.action == null) continue;
-
-            data.inputEvent?.Dispose(); // Unbind any existing events to avoid duplicates.
-
-            // Create a new event handler for the input action.
-            // It only activates if the viewer is enabled.
-            data.inputEvent = OnInputSystemEvent<float>.WithAction(data.inputActionReference.action, this, () => data.enable)
-                // When the input is pressed, start the color transition to the activated color.
-                .OnPressed(_ => StartColorTransition(data.inputIcon, activatedColor, transitionTime))
-                // When the input is released, start the color transition to the disabled color.
-                .OnReleased(() => StartColorTransition(data.inputIcon, disabledColor, transitionTime));
-
-            // Set the initial icon color and active state based on enable flag.
-            if (data.enable)
-            {
-                SetInitialColor(data.inputIcon);
-            }
-            else
-            {
-                SetTransparent(data.inputIcon);
-            }
-
-            inputViewerData[i] = data; // Store updated struct back to the list.
-        }
-    }
-
-    /// <summary>
-    /// Initializes the input event bindings and icon states for directional input viewers.
-    /// Sets up handlers for pressed, held, and released states with proper direction icon activation.
-    /// </summary>
-    private void InitializeInputMultipleViewsData()
-    {
-        for (int i = 0; i < inputMultipleViewsData.Count; i++)
-        {
-            var data = inputMultipleViewsData[i];
-
-            // Skip if the referenced InputAction is not assigned.
-            if (data.inputActionReference.action == null) continue;
-
-            data.inputEvent?.Dispose(); // Unbind existing events to prevent duplicates.
-
-            // Create new event handler for Vector2 input (e.g., joystick or D-pad).
-            // Activates only if the viewer is enabled.
-            data.inputEvent = OnInputSystemEvent<Vector2>.WithAction(data.inputActionReference.action, this, () => data.enable)
-                .OnPressed(_ =>
+                // Update control type and refresh icons only if the value changed.
+                if (controlType != value)
                 {
-                    // On press, if control type is Gamepad, highlight the "up" icon.
-                    if (controlType == ControlType.Gamepad && data.inputIconUp != null)
-                    {
-                        StartColorTransition(data.inputIconUp, activatedColor, transitionTime);
-                    }
-                })
-                .OnHold(direction =>
-                {
-                    // While holding, if control type is Keyboard, set directional icons active based on input vector.
-                    if (controlType == ControlType.Keyboard)
-                    {
-                        SetDirectionActive(data.inputIconUp, direction.y > 0.5f);
-                        SetDirectionActive(data.inputIconDown, direction.y < -0.5f);
-                        SetDirectionActive(data.inputIconRight, direction.x > 0.5f);
-                        SetDirectionActive(data.inputIconLeft, direction.x < -0.5f);
-                    }
-                })
-                .OnReleased(() =>
-                {
-                    // On release, fade icons back to disabled color or deactivate accordingly.
-                    if (data.inputIconUp != null) StartColorTransition(data.inputIconUp, disabledColor, transitionTime);
-
-                    if (controlType == ControlType.Keyboard)
-                    {
-                        if (data.inputIconDown != null) StartColorTransition(data.inputIconDown, disabledColor, transitionTime);
-                        if (data.inputIconRight != null) StartColorTransition(data.inputIconRight, disabledColor, transitionTime);
-                        if (data.inputIconLeft != null) StartColorTransition(data.inputIconLeft, disabledColor, transitionTime);
-                    }
-                });
-
-            // Set initial icon colors or hide icons based on enable flag.
-            if (data.enable)
-            {
-                SetInitialColor(data.inputIconUp);
-                SetInitialColor(data.inputIconDown);
-                SetInitialColor(data.inputIconLeft);
-                SetInitialColor(data.inputIconRight);
-            }
-            else
-            {
-                SetTransparent(data.inputIconUp);
-                SetTransparent(data.inputIconDown);
-                SetTransparent(data.inputIconLeft);
-                SetTransparent(data.inputIconRight);
-            }
-
-            inputMultipleViewsData[i] = data; // Store updated struct back to the list.
-        }
-    }
-
-    #endregion
-
-    #region === Input Detection & Control Type ===
-
-    /// <summary>
-    /// Detects the current control type by checking if any gamepads are connected.
-    /// Defaults to Gamepad if any are found; otherwise, Keyboard.
-    /// </summary>
-    private void DetectControlType() => controlType = Gamepad.all.Count > 0 ? ControlType.Gamepad : ControlType.Keyboard;
-
-    /// <summary>
-    /// Event handler called when an input device changes (connected, disconnected, etc.).
-    /// If automatic detection is enabled, updates the control type accordingly.
-    /// </summary>
-    /// <param name="device">The input device that changed.</param>
-    /// <param name="change">The type of change.</param>
-    private void OnDeviceChange(InputDevice device, InputDeviceChange change)
-    {
-        if (!automatic) return;
-
-        if (device is Gamepad)
-        {
-            // Determine new control type based on connected gamepads.
-            ControlType newControlType = Gamepad.all.Count > 0 ? ControlType.Gamepad : ControlType.Keyboard;
-
-            // Update control type and refresh icons if changed.
-            if (newControlType != controlType)
-            {
-                controlType = newControlType;
-                UpdateIcons();
-            }
-        }
-    }
-
-    #endregion
-
-    #region === Icon Update ===
-
-    /// <summary>
-    /// Updates all input icons for both single and multiple views based on the current control type.
-    /// Ensures the displayed sprites correspond to the correct bindings (keyboard or gamepad).
-    /// </summary>
-    public void UpdateIcons()
-    {
-        // Lazily initialize extension data if null.
-        if (extensionData == null) extensionData = InputSystemExtensionHelper.GetInputSystemExtensionData();
-
-        UpdateInputViewerIcons();       // Update icons for single input viewers.
-        UpdateInputMultipleViewsIcons(); // Update icons for directional inputs.
-    }
-
-    /// <summary>
-    /// Updates the sprites of single input icons based on the current control type and binding IDs.
-    /// </summary>
-    private void UpdateInputViewerIcons()
-    {
-        for (int i = 0; i < inputViewerData.Count; i++)
-        {
-            var data = inputViewerData[i];
-
-            // Skip if action or icon is not assigned.
-            if (data.inputActionReference.action == null || data.inputIcon == null) continue;
-
-            // Select the correct binding ID depending on control type.
-            string bindingId = controlType == ControlType.Keyboard ? data.keyboardId : data.gamepadId;
-
-            // Retrieve the sprite corresponding to the binding.
-            Sprite sprite = GetSpriteForBinding(data.inputActionReference.action, bindingId);
-            if (sprite != null)
-            {
-                data.inputIcon.sprite = sprite;
-            }
-
-            inputViewerData[i] = data;
-        }
-    }
-
-    /// <summary>
-    /// Updates the directional input icons’ sprites and their visibility based on the current control type.
-    /// Uses the binding IDs and the GetSpriteForBinding method for accurate sprite retrieval.
-    /// For keyboard, each part of a composite (Up, Down, Left, Right) is assigned its own sprite.
-    /// For gamepad, only the primary direction ("up") is highlighted.
-    /// </summary>
-    private void UpdateInputMultipleViewsIcons()
-    {
-        for (int i = 0; i < inputMultipleViewsData.Count; i++)
-        {
-            var data = inputMultipleViewsData[i];
-            if (data.inputActionReference.action == null) continue;
-
-            var action = data.inputActionReference.action;
-
-            if (controlType == ControlType.Keyboard)
-            {
-                // Find all bindings that are part of a composite (e.g., WASD or Arrow keys).
-                var compositeBindings = action.bindings.Where(b => b.isPartOfComposite).ToList();
-
-                // Assign sprites for each directional part of the composite if available.
-                foreach (var binding in compositeBindings)
-                {
-                    switch (binding.name.ToLower())
-                    {
-                        case "up":
-                            if (data.inputIconUp != null) data.inputIconUp.sprite = GetSpriteForBinding(action, binding.id.ToString());
-                            break;
-                        case "down":
-                            if (data.inputIconDown != null) data.inputIconDown.sprite = GetSpriteForBinding(action, binding.id.ToString());
-                            break;
-                        case "left":
-                            if (data.inputIconLeft != null) data.inputIconLeft.sprite = GetSpriteForBinding(action, binding.id.ToString());
-                            break;
-                        case "right":
-                            if (data.inputIconRight != null) data.inputIconRight.sprite = GetSpriteForBinding(action, binding.id.ToString());
-                            break;
-                        default:
-                            Debug.LogWarning($"[InputDisplayManager] Unrecognized composite part '{binding.name}' in action '{action.name}'.", this);
-                            break;
-                    }
+                    controlType = value;
+                    UpdateIcons(); // Refresh icons to match the new control type.
                 }
-
-                // Show all directional icons for keyboard.
-                SetIconsActive(data, up: true, down: true, left: true, right: true);
             }
-            else
-            {
-                // For gamepad, assign sprite only to the "up" icon (primary direction).
-                string bindingId = data.gamepadId;
-                if (!string.IsNullOrEmpty(bindingId) && data.inputIconUp != null)
-                {
-                    data.inputIconUp.sprite = GetSpriteForBinding(action, bindingId);
-                }
-
-                // Activate only the "up" icon, hide the others.
-                SetIconsActive(data, up: true, down: false, left: false, right: false);
-            }
-
-            inputMultipleViewsData[i] = data;
-        }
-    }
-
-    /// <summary>
-    /// Retrieves the appropriate sprite for a given InputAction and binding ID.
-    /// For keyboard and mouse bindings, it uses the stored keyName to find the corresponding sprite.
-    /// For gamepad bindings, it selects the sprite based on the current gamepad type (PS4 or Xbox).
-    /// </summary>
-    /// <param name="action">The InputAction to query for the binding.</param>
-    /// <param name="bindingId">The unique binding identifier string.</param>
-    /// <returns>
-    /// The sprite representing the input binding. 
-    /// Returns the default sprite if the binding or corresponding sprite is not found.
-    /// </returns>
-    private Sprite GetSpriteForBinding(InputAction action, string bindingId)
-    {
-        // Return default sprite if bindingId is null or empty.
-        if (string.IsNullOrEmpty(bindingId)) return extensionData.defaultSprite;
-
-        // Find the InputBinding with the matching ID.
-        var binding = action.bindings.FirstOrDefault(b => b.id.ToString() == bindingId);
-        if (binding == null)
-        {
-            Debug.LogWarning($"[InputDisplayManager] Binding ID '{bindingId}' not found in action '{action.name}'. Using default sprite.", this);
-            return extensionData.defaultSprite;
         }
 
-        // Skip composite bindings for keyboard/mouse since they are handled differently.
-        if (binding.isComposite)
+        /// <summary>
+        /// Gets or sets the list of input viewer data (single input).
+        /// This is mainly used for editor access or dynamic modification.
+        /// </summary>
+        public List<InputViewerData> InputViewerDataEditor
         {
-            Debug.LogWarning($"[InputDisplayManager] Binding '{binding.name}' is a composite. Skipping for keyboard/mouse display.", this);
-            return extensionData.defaultSprite;
+            get => inputViewerData;
+            set => inputViewerData = value;
         }
 
-        string path = binding.effectivePath;
-
-        if (controlType == ControlType.Keyboard)
+        /// <summary>
+        /// Gets or sets the list of directional input data.
+        /// Useful for editor editing or runtime configuration.
+        /// </summary>
+        public List<InputMultipleViewsData> InputMultipleViewsDataEditor
         {
-            // Handle keyboard or mouse bindings.
-            if (path.StartsWith("<Keyboard>/", StringComparison.OrdinalIgnoreCase) || path.StartsWith("<Mouse>/", StringComparison.OrdinalIgnoreCase))
-            {
-                int index = extensionData.KeyCodes.FindIndex(k => k.keyName.Equals(path, StringComparison.OrdinalIgnoreCase));
-                var sprite = index >= 0 ? extensionData.KeyCodes[index].sprite : null;
-
-                if (sprite != null) return sprite;
-
-                // Key exists but has no sprite assigned.
-                Debug.LogError($"[InputDisplayManager] KeyCodes item at index {index} ('{path}') has no sprite assigned. Using default sprite.", this);
-                return extensionData.defaultSprite;
-            }
-
-            // Binding path does not match known keyboard/mouse devices.
-            Debug.LogError($"[InputDisplayManager] Unrecognized binding path '{path}' in keyboard/mouse bindings. Using default sprite.", this);
-            return extensionData.defaultSprite;
+            get => inputMultipleViewsData;
+            set => inputMultipleViewsData = value;
         }
-        else
+
+        #endregion
+
+        #region === Unity Events ===
+
+        /// <summary>
+        /// Called before Start(). Validates the input data to ensure all fields are properly assigned.
+        /// </summary>
+        private void Awake() => ValidateData(); // Perform initial validation on serialized input lists.
+
+        /// <summary>
+        /// Called when the GameObject is enabled. Registers device change listeners and updates icons.
+        /// </summary>
+        private void OnEnable()
         {
-            // Handle gamepad bindings.
-            string cleanPath = path.Split('/').Last(); // Extract the last segment (e.g., buttonSouth).
-
-            // Detect if the connected gamepad is a PS4 controller.
-            bool isPS4 = false;
-            if (Gamepad.current != null)
-            {
-                string product = Gamepad.current.description.product?.ToLowerInvariant();
-                string manufacturer = Gamepad.current.description.manufacturer?.ToLowerInvariant();
-                isPS4 = product?.Contains("wireless controller") == true || manufacturer?.Contains("sony") == true;
-            }
-
-            // Retrieve the sprite from PS4 or Xbox mappings, fallback to default if not found.
-            var sprite = isPS4 ? extensionData.ps4.GetSprite(cleanPath) : extensionData.xbox.GetSprite(cleanPath);
-            if (sprite != null) return sprite;
-
-            Debug.LogWarning($"[InputDisplayManager] Gamepad binding '{cleanPath}' has no sprite assigned. Using default sprite.", this);
-            return extensionData.defaultSprite;
+            if (automatic) DetectControlType(); // Automatically determine the control type based on connected devices.
+            onDeviceChange += OnDeviceChange; // Subscribe to device change events.
+            InitializeInputViewerData(); // Setup event handlers for single input icons.
+            InitializeInputMultipleViewsData(); // Setup event handlers for directional inputs.
+            UpdateIcons(); // Apply appropriate sprites to icons based on current control type.
         }
-    }
 
-    /// <summary>
-    /// Activates or deactivates the directional icons based on the boolean flags.
-    /// </summary>
-    /// <param name="data">The InputMultipleViewsData containing the icons.</param>
-    /// <param name="up">Whether to activate the up icon.</param>
-    /// <param name="down">Whether to activate the down icon.</param>
-    /// <param name="left">Whether to activate the left icon.</param>
-    /// <param name="right">Whether to activate the right icon.</param>
-    private void SetIconsActive(InputMultipleViewsData data, bool up, bool down, bool left, bool right)
-    {
-        if (data.inputIconUp != null) data.inputIconUp.gameObject.SetActive(up);
-        if (data.inputIconDown != null) data.inputIconDown.gameObject.SetActive(down);
-        if (data.inputIconLeft != null) data.inputIconLeft.gameObject.SetActive(left);
-        if (data.inputIconRight != null) data.inputIconRight.gameObject.SetActive(right);
-    }
+        /// <summary>
+        /// Called when the GameObject is disabled. Triggers cleanup to stop coroutines and unbind events.
+        /// </summary>
+        private void OnDisable() => OnClean();
 
-    #endregion
+        /// <summary>
+        /// Called when the GameObject is destroyed. Ensures cleanup is performed as a final safeguard.
+        /// </summary>
+        private void OnDestroy() => OnClean();
 
-    #region === View Control ===
+        #endregion
 
-    /// <summary>
-    /// Enables or disables a specific input viewer identified by its nameTag.
-    /// Updates the icon's visibility and color accordingly.
-    /// </summary>
-    /// <param name="nameTag">The unique identifier for the viewer to update.</param>
-    /// <param name="enable">True to enable; false to disable.</param>
-    public void EnableAndDisableViewer(string nameTag, bool enable)
-    {
-        // Search and update in single input viewer data.
-        for (int i = 0; i < inputViewerData.Count; i++)
+        #region === Validation ===
+
+        /// <summary>
+        /// Validates all serialized input data to ensure required fields are assigned correctly.
+        /// Logs errors in the console if any issues are found.
+        /// </summary>
+        private void ValidateData()
         {
-            if (inputViewerData[i].nameTag == nameTag)
+            bool hasError = false;
+
+            // Validate each InputViewerData entry.
+            for (int i = 0; i < inputViewerData.Count; i++)
             {
                 var data = inputViewerData[i];
-                data.enable = enable;
-                inputViewerData[i] = data;
 
-                HandleIconEnableDisable(data.inputIcon, enable);
+                // Check if the name tag is assigned.
+                if (string.IsNullOrWhiteSpace(data.nameTag))
+                {
+                    Debug.LogError($"[InputDisplayManager] InputViewerData at index {i} is missing a nameTag.", this);
+                    hasError = true;
+                }
 
-                return; // Exit once found and updated.
+                // Check if the InputActionReference is assigned.
+                if (data.inputActionReference == null)
+                {
+                    Debug.LogError($"[InputDisplayManager] InputViewerData '{data.nameTag}' is missing an InputActionReference.", this);
+                    hasError = true;
+                }
+
+                // Check if the inputIcon (UI image) is assigned.
+                if (data.inputIcon == null)
+                {
+                    Debug.LogError($"[InputDisplayManager] InputViewerData '{data.nameTag}' is missing an InputIcon Image reference.", this);
+                    hasError = true;
+                }
+            }
+
+            // Validate each InputMultipleViewsData entry.
+            for (int i = 0; i < inputMultipleViewsData.Count; i++)
+            {
+                var data = inputMultipleViewsData[i];
+
+                // Check if the name tag is assigned.
+                if (string.IsNullOrWhiteSpace(data.nameTag))
+                {
+                    Debug.LogError($"[InputDisplayManager] InputMultipleViewsData at index {i} is missing a nameTag.", this);
+                    hasError = true;
+                }
+
+                // Check if the InputActionReference is assigned.
+                if (data.inputActionReference == null)
+                {
+                    Debug.LogError($"[InputDisplayManager] InputMultipleViewsData '{data.nameTag}' is missing an InputActionReference.", this);
+                    hasError = true;
+                }
+
+                // Check if all directional icons are assigned.
+                if (data.inputIconUp == null || data.inputIconDown == null || data.inputIconLeft == null || data.inputIconRight == null)
+                {
+                    Debug.LogError($"[InputDisplayManager] InputMultipleViewsData '{data.nameTag}' is missing one or more direction icons.", this);
+                    hasError = true;
+                }
+            }
+
+            // If no errors were found, log a success message.
+            if (!hasError)
+            {
+                Debug.Log("[InputDisplayManager] Initialization check passed.", this);
             }
         }
 
-        // Search and update in multiple views input data.
-        for (int i = 0; i < inputMultipleViewsData.Count; i++)
+        #endregion
+
+        #region === Initialization Helpers ===
+
+        /// <summary>
+        /// Initializes the input event bindings and icon states for single input viewers.
+        /// Sets up event handlers to respond to input press and release.
+        /// </summary>
+        private void InitializeInputViewerData()
         {
-            if (inputMultipleViewsData[i].nameTag == nameTag)
+            for (int i = 0; i < inputViewerData.Count; i++)
             {
-                var data = inputMultipleViewsData[i];
-                data.enable = enable;
-                inputMultipleViewsData[i] = data;
+                var data = inputViewerData[i];
 
-                if (controlType == ControlType.Gamepad)
+                // Skip if the referenced InputAction is not assigned.
+                if (data.inputActionReference.action == null) continue;
+
+                data.inputEvent?.Dispose(); // Unbind any existing events to avoid duplicates.
+
+                // Create a new event handler for the input action.
+                // It only activates if the viewer is enabled.
+                data.inputEvent = OnInputSystemEvent<float>.WithAction(data.inputActionReference.action, this, () => data.enable)
+                    // When the input is pressed, start the color transition to the activated color.
+                    .OnPressed(_ => StartColorTransition(data.inputIcon, activatedColor, transitionTime))
+                    // When the input is released, start the color transition to the disabled color.
+                    .OnReleased(() => StartColorTransition(data.inputIcon, disabledColor, transitionTime));
+
+                // Set the initial icon color and active state based on enable flag.
+                if (data.enable)
                 {
-                    // For gamepad, only show the "up" icon and hide others.
-                    HandleIconEnableDisable(data.inputIconUp, enable);
-
-                    if (data.inputIconDown != null) data.inputIconDown.gameObject.SetActive(false);
-                    if (data.inputIconLeft != null) data.inputIconLeft.gameObject.SetActive(false);
-                    if (data.inputIconRight != null) data.inputIconRight.gameObject.SetActive(false);
+                    SetInitialColor(data.inputIcon);
                 }
                 else
                 {
-                    // For keyboard, handle all directional icons.
-                    var icons = new[] { data.inputIconUp, data.inputIconDown, data.inputIconLeft, data.inputIconRight };
-
-                    foreach (var icon in icons)
-                    {
-                        HandleIconEnableDisable(icon, enable);
-                    }
+                    SetTransparent(data.inputIcon);
                 }
 
-                return; // Exit after updating.
+                inputViewerData[i] = data; // Store updated struct back to the list.
             }
         }
 
-        Debug.LogError($"Viewer with nameTag '{nameTag}' not found in either inputViewerData or inputMultipleViewsData.", this);
-    }
-
-    /// <summary>
-    /// Helper method to enable or disable an icon's GameObject and handle its color transition.
-    /// </summary>
-    /// <param name="image">The UI Image component of the icon.</param>
-    /// <param name="enable">True to enable; false to disable.</param>
-    private void HandleIconEnableDisable(Image image, bool enable)
-    {
-        if (image == null) return;
-
-        if (enable)
+        /// <summary>
+        /// Initializes the input event bindings and icon states for directional input viewers.
+        /// Sets up handlers for pressed, held, and released states with proper direction icon activation.
+        /// </summary>
+        private void InitializeInputMultipleViewsData()
         {
-            if (!image.gameObject.activeSelf)
+            for (int i = 0; i < inputMultipleViewsData.Count; i++)
             {
-                image.gameObject.SetActive(true);
+                var data = inputMultipleViewsData[i];
 
-                Color startColor = disabledColor;
-                startColor.a = 0f;
-                image.color = startColor;
+                // Skip if the referenced InputAction is not assigned.
+                if (data.inputActionReference.action == null) continue;
 
-                // Start transition to activated color.
-                StartColorTransition(image, disabledColor, hideTransitionTime);
+                data.inputEvent?.Dispose(); // Unbind existing events to prevent duplicates.
+
+                // Create new event handler for Vector2 input (e.g., joystick or D-pad).
+                // Activates only if the viewer is enabled.
+                data.inputEvent = OnInputSystemEvent<Vector2>.WithAction(data.inputActionReference.action, this, () => data.enable)
+                    .OnPressed(_ =>
+                    {
+                        // On press, if control type is Gamepad, highlight the "up" icon.
+                        if (controlType == ControlType.Gamepad && data.inputIconUp != null)
+                        {
+                            StartColorTransition(data.inputIconUp, activatedColor, transitionTime);
+                        }
+                    })
+                    .OnHold(direction =>
+                    {
+                        // While holding, if control type is Keyboard, set directional icons active based on input vector.
+                        if (controlType == ControlType.Keyboard)
+                        {
+                            SetDirectionActive(data.inputIconUp, direction.y > 0.5f);
+                            SetDirectionActive(data.inputIconDown, direction.y < -0.5f);
+                            SetDirectionActive(data.inputIconRight, direction.x > 0.5f);
+                            SetDirectionActive(data.inputIconLeft, direction.x < -0.5f);
+                        }
+                    })
+                    .OnReleased(() =>
+                    {
+                        // On release, fade icons back to disabled color or deactivate accordingly.
+                        if (data.inputIconUp != null) StartColorTransition(data.inputIconUp, disabledColor, transitionTime);
+
+                        if (controlType == ControlType.Keyboard)
+                        {
+                            if (data.inputIconDown != null) StartColorTransition(data.inputIconDown, disabledColor, transitionTime);
+                            if (data.inputIconRight != null) StartColorTransition(data.inputIconRight, disabledColor, transitionTime);
+                            if (data.inputIconLeft != null) StartColorTransition(data.inputIconLeft, disabledColor, transitionTime);
+                        }
+                    });
+
+                // Set initial icon colors or hide icons based on enable flag.
+                if (data.enable)
+                {
+                    SetInitialColor(data.inputIconUp);
+                    SetInitialColor(data.inputIconDown);
+                    SetInitialColor(data.inputIconLeft);
+                    SetInitialColor(data.inputIconRight);
+                }
+                else
+                {
+                    SetTransparent(data.inputIconUp);
+                    SetTransparent(data.inputIconDown);
+                    SetTransparent(data.inputIconLeft);
+                    SetTransparent(data.inputIconRight);
+                }
+
+                inputMultipleViewsData[i] = data; // Store updated struct back to the list.
             }
         }
-        else
+
+        #endregion
+
+        #region === Input Detection & Control Type ===
+
+        /// <summary>
+        /// Detects the current control type by checking if any gamepads are connected.
+        /// Defaults to Gamepad if any are found; otherwise, Keyboard.
+        /// </summary>
+        private void DetectControlType() => controlType = Gamepad.all.Count > 0 ? ControlType.Gamepad : ControlType.Keyboard;
+
+        /// <summary>
+        /// Event handler called when an input device changes (connected, disconnected, etc.).
+        /// If automatic detection is enabled, updates the control type accordingly.
+        /// </summary>
+        /// <param name="device">The input device that changed.</param>
+        /// <param name="change">The type of change.</param>
+        private void OnDeviceChange(InputDevice device, InputDeviceChange change)
         {
-            // Start fading out and deactivate after transition.
-            StartCoroutine(FadeOutAndDeactivate(image, hideTransitionTime));
+            if (!automatic) return;
+
+            if (device is Gamepad)
+            {
+                // Determine new control type based on connected gamepads.
+                ControlType newControlType = Gamepad.all.Count > 0 ? ControlType.Gamepad : ControlType.Keyboard;
+
+                // Update control type and refresh icons if changed.
+                if (newControlType != controlType)
+                {
+                    controlType = newControlType;
+                    UpdateIcons();
+                }
+            }
         }
-    }
 
-    /// <summary>
-    /// Coroutine that fades out an icon's color to transparent over a duration and then deactivates it.
-    /// </summary>
-    /// <param name="image">The UI Image to fade out.</param>
-    /// <param name="duration">The duration of the fade-out animation.</param>
-    /// <returns>IEnumerator for coroutine.</returns>
-    private IEnumerator FadeOutAndDeactivate(Image image, float duration)
-    {
-        if (image == null) yield break;
+        #endregion
 
-        Color startColor = image.color;
-        Color targetColor = new(startColor.r, startColor.g, startColor.b, 0f);
+        #region === Icon Update ===
 
-        float elapsed = 0f;
-        while (elapsed < duration)
+        /// <summary>
+        /// Updates all input icons for both single and multiple views based on the current control type.
+        /// Ensures the displayed sprites correspond to the correct bindings (keyboard or gamepad).
+        /// </summary>
+        public void UpdateIcons()
         {
-            elapsed += Time.deltaTime;
-            image.color = Color.Lerp(startColor, targetColor, elapsed / duration);
-            yield return null;
+            // Lazily initialize extension data if null.
+            if (extensionData == null) extensionData = InputSystemExtensionHelper.GetInputSystemExtensionData();
+
+            UpdateInputViewerIcons();       // Update icons for single input viewers.
+            UpdateInputMultipleViewsIcons(); // Update icons for directional inputs.
         }
 
-        image.color = targetColor;
-        image.gameObject.SetActive(false);
-    }
-
-    #endregion
-
-    #region === Icon Color Helpers ===
-
-    /// <summary>
-    /// Starts a smooth color transition on the given Image to the target color over the specified duration.
-    /// Cancels any existing transition on the same Image to avoid conflicts.
-    /// </summary>
-    /// <param name="image">The UI Image to animate.</param>
-    /// <param name="targetColor">The target color to transition to.</param>
-    /// <param name="duration">The duration of the color transition.</param>
-    private void StartColorTransition(Image image, Color targetColor, float duration)
-    {
-        if (image == null) return;
-
-        // If there's already a transition running for this image, stop it first.
-        if (colorTransitions.ContainsKey(image))
+        /// <summary>
+        /// Updates the sprites of single input icons based on the current control type and binding IDs.
+        /// </summary>
+        private void UpdateInputViewerIcons()
         {
-            StopCoroutine(colorTransitions[image]);
+            for (int i = 0; i < inputViewerData.Count; i++)
+            {
+                var data = inputViewerData[i];
+
+                // Skip if action or icon is not assigned.
+                if (data.inputActionReference.action == null || data.inputIcon == null) continue;
+
+                // Select the correct binding ID depending on control type.
+                string bindingId = controlType == ControlType.Keyboard ? data.keyboardId : data.gamepadId;
+
+                // Retrieve the sprite corresponding to the binding.
+                Sprite sprite = GetSpriteForBinding(data.inputActionReference.action, bindingId);
+                if (sprite != null)
+                {
+                    data.inputIcon.sprite = sprite;
+                }
+
+                inputViewerData[i] = data;
+            }
+        }
+
+        /// <summary>
+        /// Updates the directional input icons’ sprites and their visibility based on the current control type.
+        /// Uses the binding IDs and the GetSpriteForBinding method for accurate sprite retrieval.
+        /// For keyboard, each part of a composite (Up, Down, Left, Right) is assigned its own sprite.
+        /// For gamepad, only the primary direction ("up") is highlighted.
+        /// </summary>
+        private void UpdateInputMultipleViewsIcons()
+        {
+            for (int i = 0; i < inputMultipleViewsData.Count; i++)
+            {
+                var data = inputMultipleViewsData[i];
+                if (data.inputActionReference.action == null) continue;
+
+                var action = data.inputActionReference.action;
+
+                if (controlType == ControlType.Keyboard)
+                {
+                    // Find all bindings that are part of a composite (e.g., WASD or Arrow keys).
+                    var compositeBindings = action.bindings.Where(b => b.isPartOfComposite).ToList();
+
+                    // Assign sprites for each directional part of the composite if available.
+                    foreach (var binding in compositeBindings)
+                    {
+                        switch (binding.name.ToLower())
+                        {
+                            case "up":
+                                if (data.inputIconUp != null) data.inputIconUp.sprite = GetSpriteForBinding(action, binding.id.ToString());
+                                break;
+                            case "down":
+                                if (data.inputIconDown != null) data.inputIconDown.sprite = GetSpriteForBinding(action, binding.id.ToString());
+                                break;
+                            case "left":
+                                if (data.inputIconLeft != null) data.inputIconLeft.sprite = GetSpriteForBinding(action, binding.id.ToString());
+                                break;
+                            case "right":
+                                if (data.inputIconRight != null) data.inputIconRight.sprite = GetSpriteForBinding(action, binding.id.ToString());
+                                break;
+                            default:
+                                Debug.LogWarning($"[InputDisplayManager] Unrecognized composite part '{binding.name}' in action '{action.name}'.", this);
+                                break;
+                        }
+                    }
+
+                    // Show all directional icons for keyboard.
+                    SetIconsActive(data, up: true, down: true, left: true, right: true);
+                }
+                else
+                {
+                    // For gamepad, assign sprite only to the "up" icon (primary direction).
+                    string bindingId = data.gamepadId;
+                    if (!string.IsNullOrEmpty(bindingId) && data.inputIconUp != null)
+                    {
+                        data.inputIconUp.sprite = GetSpriteForBinding(action, bindingId);
+                    }
+
+                    // Activate only the "up" icon, hide the others.
+                    SetIconsActive(data, up: true, down: false, left: false, right: false);
+                }
+
+                inputMultipleViewsData[i] = data;
+            }
+        }
+
+        /// <summary>
+        /// Retrieves the appropriate sprite for a given InputAction and binding ID.
+        /// For keyboard and mouse bindings, it uses the stored keyName to find the corresponding sprite.
+        /// For gamepad bindings, it selects the sprite based on the current gamepad type (PS4 or Xbox).
+        /// </summary>
+        /// <param name="action">The InputAction to query for the binding.</param>
+        /// <param name="bindingId">The unique binding identifier string.</param>
+        /// <returns>
+        /// The sprite representing the input binding. 
+        /// Returns the default sprite if the binding or corresponding sprite is not found.
+        /// </returns>
+        private Sprite GetSpriteForBinding(InputAction action, string bindingId)
+        {
+            // Return default sprite if bindingId is null or empty.
+            if (string.IsNullOrEmpty(bindingId)) return extensionData.defaultSprite;
+
+            // Find the InputBinding with the matching ID.
+            var binding = action.bindings.FirstOrDefault(b => b.id.ToString() == bindingId);
+            if (binding == null)
+            {
+                Debug.LogWarning($"[InputDisplayManager] Binding ID '{bindingId}' not found in action '{action.name}'. Using default sprite.", this);
+                return extensionData.defaultSprite;
+            }
+
+            // Skip composite bindings for keyboard/mouse since they are handled differently.
+            if (binding.isComposite)
+            {
+                Debug.LogWarning($"[InputDisplayManager] Binding '{binding.name}' is a composite. Skipping for keyboard/mouse display.", this);
+                return extensionData.defaultSprite;
+            }
+
+            string path = binding.effectivePath;
+
+            if (controlType == ControlType.Keyboard)
+            {
+                // Handle keyboard or mouse bindings.
+                if (path.StartsWith("<Keyboard>/", StringComparison.OrdinalIgnoreCase) || path.StartsWith("<Mouse>/", StringComparison.OrdinalIgnoreCase))
+                {
+                    int index = extensionData.KeyCodes.FindIndex(k => k.keyName.Equals(path, StringComparison.OrdinalIgnoreCase));
+                    var sprite = index >= 0 ? extensionData.KeyCodes[index].sprite : null;
+
+                    if (sprite != null) return sprite;
+
+                    // Key exists but has no sprite assigned.
+                    Debug.LogError($"[InputDisplayManager] KeyCodes item at index {index} ('{path}') has no sprite assigned. Using default sprite.", this);
+                    return extensionData.defaultSprite;
+                }
+
+                // Binding path does not match known keyboard/mouse devices.
+                Debug.LogError($"[InputDisplayManager] Unrecognized binding path '{path}' in keyboard/mouse bindings. Using default sprite.", this);
+                return extensionData.defaultSprite;
+            }
+            else
+            {
+                // Handle gamepad bindings.
+                string cleanPath = path.Split('/').Last(); // Extract the last segment (e.g., buttonSouth).
+
+                // Detect if the connected gamepad is a PS4 controller.
+                bool isPS4 = false;
+                if (Gamepad.current != null)
+                {
+                    string product = Gamepad.current.description.product?.ToLowerInvariant();
+                    string manufacturer = Gamepad.current.description.manufacturer?.ToLowerInvariant();
+                    isPS4 = product?.Contains("wireless controller") == true || manufacturer?.Contains("sony") == true;
+                }
+
+                // Retrieve the sprite from PS4 or Xbox mappings, fallback to default if not found.
+                var sprite = isPS4 ? extensionData.ps.GetSprite(cleanPath) : extensionData.xbox.GetSprite(cleanPath);
+                if (sprite != null) return sprite;
+
+                Debug.LogWarning($"[InputDisplayManager] Gamepad binding '{cleanPath}' has no sprite assigned. Using default sprite.", this);
+                return extensionData.defaultSprite;
+            }
+        }
+
+        /// <summary>
+        /// Activates or deactivates the directional icons based on the boolean flags.
+        /// </summary>
+        /// <param name="data">The InputMultipleViewsData containing the icons.</param>
+        /// <param name="up">Whether to activate the up icon.</param>
+        /// <param name="down">Whether to activate the down icon.</param>
+        /// <param name="left">Whether to activate the left icon.</param>
+        /// <param name="right">Whether to activate the right icon.</param>
+        private void SetIconsActive(InputMultipleViewsData data, bool up, bool down, bool left, bool right)
+        {
+            if (data.inputIconUp != null) data.inputIconUp.gameObject.SetActive(up);
+            if (data.inputIconDown != null) data.inputIconDown.gameObject.SetActive(down);
+            if (data.inputIconLeft != null) data.inputIconLeft.gameObject.SetActive(left);
+            if (data.inputIconRight != null) data.inputIconRight.gameObject.SetActive(right);
+        }
+
+        #endregion
+
+        #region === View Control ===
+
+        /// <summary>
+        /// Enables or disables a specific input viewer identified by its nameTag.
+        /// Updates the icon's visibility and color accordingly.
+        /// </summary>
+        /// <param name="nameTag">The unique identifier for the viewer to update.</param>
+        /// <param name="enable">True to enable; false to disable.</param>
+        public void EnableAndDisableViewer(string nameTag, bool enable)
+        {
+            // Search and update in single input viewer data.
+            for (int i = 0; i < inputViewerData.Count; i++)
+            {
+                if (inputViewerData[i].nameTag == nameTag)
+                {
+                    var data = inputViewerData[i];
+                    data.enable = enable;
+                    inputViewerData[i] = data;
+
+                    HandleIconEnableDisable(data.inputIcon, enable);
+
+                    return; // Exit once found and updated.
+                }
+            }
+
+            // Search and update in multiple views input data.
+            for (int i = 0; i < inputMultipleViewsData.Count; i++)
+            {
+                if (inputMultipleViewsData[i].nameTag == nameTag)
+                {
+                    var data = inputMultipleViewsData[i];
+                    data.enable = enable;
+                    inputMultipleViewsData[i] = data;
+
+                    if (controlType == ControlType.Gamepad)
+                    {
+                        // For gamepad, only show the "up" icon and hide others.
+                        HandleIconEnableDisable(data.inputIconUp, enable);
+
+                        if (data.inputIconDown != null) data.inputIconDown.gameObject.SetActive(false);
+                        if (data.inputIconLeft != null) data.inputIconLeft.gameObject.SetActive(false);
+                        if (data.inputIconRight != null) data.inputIconRight.gameObject.SetActive(false);
+                    }
+                    else
+                    {
+                        // For keyboard, handle all directional icons.
+                        var icons = new[] { data.inputIconUp, data.inputIconDown, data.inputIconLeft, data.inputIconRight };
+
+                        foreach (var icon in icons)
+                        {
+                            HandleIconEnableDisable(icon, enable);
+                        }
+                    }
+
+                    return; // Exit after updating.
+                }
+            }
+
+            Debug.LogError($"Viewer with nameTag '{nameTag}' not found in either inputViewerData or inputMultipleViewsData.", this);
+        }
+
+        /// <summary>
+        /// Helper method to enable or disable an icon's GameObject and handle its color transition.
+        /// </summary>
+        /// <param name="image">The UI Image component of the icon.</param>
+        /// <param name="enable">True to enable; false to disable.</param>
+        private void HandleIconEnableDisable(Image image, bool enable)
+        {
+            if (image == null) return;
+
+            if (enable)
+            {
+                if (!image.gameObject.activeSelf)
+                {
+                    image.gameObject.SetActive(true);
+
+                    Color startColor = disabledColor;
+                    startColor.a = 0f;
+                    image.color = startColor;
+
+                    // Start transition to activated color.
+                    StartColorTransition(image, disabledColor, hideTransitionTime);
+                }
+            }
+            else
+            {
+                // Start fading out and deactivate after transition.
+                StartCoroutine(FadeOutAndDeactivate(image, hideTransitionTime));
+            }
+        }
+
+        /// <summary>
+        /// Coroutine that fades out an icon's color to transparent over a duration and then deactivates it.
+        /// </summary>
+        /// <param name="image">The UI Image to fade out.</param>
+        /// <param name="duration">The duration of the fade-out animation.</param>
+        /// <returns>IEnumerator for coroutine.</returns>
+        private IEnumerator FadeOutAndDeactivate(Image image, float duration)
+        {
+            if (image == null) yield break;
+
+            Color startColor = image.color;
+            Color targetColor = new(startColor.r, startColor.g, startColor.b, 0f);
+
+            float elapsed = 0f;
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                image.color = Color.Lerp(startColor, targetColor, elapsed / duration);
+                yield return null;
+            }
+
+            image.color = targetColor;
+            image.gameObject.SetActive(false);
+        }
+
+        #endregion
+
+        #region === Icon Color Helpers ===
+
+        /// <summary>
+        /// Starts a smooth color transition on the given Image to the target color over the specified duration.
+        /// Cancels any existing transition on the same Image to avoid conflicts.
+        /// </summary>
+        /// <param name="image">The UI Image to animate.</param>
+        /// <param name="targetColor">The target color to transition to.</param>
+        /// <param name="duration">The duration of the color transition.</param>
+        private void StartColorTransition(Image image, Color targetColor, float duration)
+        {
+            if (image == null) return;
+
+            // If there's already a transition running for this image, stop it first.
+            if (colorTransitions.ContainsKey(image))
+            {
+                StopCoroutine(colorTransitions[image]);
+                colorTransitions.Remove(image);
+            }
+
+            // Start the color transition coroutine and track it.
+            Coroutine coroutine = StartCoroutine(ColorTransitionCoroutine(image, targetColor, duration));
+            colorTransitions[image] = coroutine;
+        }
+
+        /// <summary>
+        /// Coroutine that gradually changes an Image's color from its current color to a target color over time.
+        /// </summary>
+        /// <param name="image">The UI Image to animate.</param>
+        /// <param name="targetColor">The final color to reach.</param>
+        /// <param name="duration">The duration over which the transition happens.</param>
+        /// <returns>IEnumerator for coroutine.</returns>
+        private IEnumerator ColorTransitionCoroutine(Image image, Color targetColor, float duration)
+        {
+            Color startColor = image.color;
+            float elapsed = 0f;
+
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                image.color = Color.Lerp(startColor, targetColor, elapsed / duration);
+                yield return null;
+            }
+
+            image.color = targetColor;
+
+            // Remove the coroutine from the tracking dictionary once done.
             colorTransitions.Remove(image);
         }
 
-        // Start the color transition coroutine and track it.
-        Coroutine coroutine = StartCoroutine(ColorTransitionCoroutine(image, targetColor, duration));
-        colorTransitions[image] = coroutine;
-    }
-
-    /// <summary>
-    /// Coroutine that gradually changes an Image's color from its current color to a target color over time.
-    /// </summary>
-    /// <param name="image">The UI Image to animate.</param>
-    /// <param name="targetColor">The final color to reach.</param>
-    /// <param name="duration">The duration over which the transition happens.</param>
-    /// <returns>IEnumerator for coroutine.</returns>
-    private IEnumerator ColorTransitionCoroutine(Image image, Color targetColor, float duration)
-    {
-        Color startColor = image.color;
-        float elapsed = 0f;
-
-        while (elapsed < duration)
+        /// <summary>
+        /// Sets the initial color and activates the GameObject of the given Image.
+        /// Typically used to prepare the icon for visible state.
+        /// </summary>
+        /// <param name="image">The Image component to set.</param>
+        private void SetInitialColor(Image image)
         {
-            elapsed += Time.deltaTime;
-            image.color = Color.Lerp(startColor, targetColor, elapsed / duration);
-            yield return null;
+            if (image == null) return;
+
+            image.color = disabledColor;
+            image.gameObject.SetActive(true);
         }
 
-        image.color = targetColor;
-
-        // Remove the coroutine from the tracking dictionary once done.
-        colorTransitions.Remove(image);
-    }
-
-    /// <summary>
-    /// Sets the initial color and activates the GameObject of the given Image.
-    /// Typically used to prepare the icon for visible state.
-    /// </summary>
-    /// <param name="image">The Image component to set.</param>
-    private void SetInitialColor(Image image)
-    {
-        if (image == null) return;
-
-        image.color = disabledColor;
-        image.gameObject.SetActive(true);
-    }
-
-    /// <summary>
-    /// Sets the given Image transparent and deactivates its GameObject.
-    /// Typically used to hide the icon without abrupt disappearance.
-    /// </summary>
-    /// <param name="image">The Image component to set transparent.</param>
-    private void SetTransparent(Image image)
-    {
-        if (image == null) return;
-
-        // Set the color to activatedColor but fully transparent.
-        image.color = new Color(activatedColor.r, activatedColor.g, activatedColor.b, 0f);
-        image.gameObject.SetActive(false);
-    }
-
-    /// <summary>
-    /// Activates or deactivates a directional icon by starting a color transition.
-    /// Uses activatedColor if active is true; otherwise disabledColor.
-    /// </summary>
-    /// <param name="image">The directional Image icon to update.</param>
-    /// <param name="active">True to activate; false to deactivate.</param>
-    private void SetDirectionActive(Image image, bool active)
-    {
-        if (image == null) return;
-
-        if (active)
+        /// <summary>
+        /// Sets the given Image transparent and deactivates its GameObject.
+        /// Typically used to hide the icon without abrupt disappearance.
+        /// </summary>
+        /// <param name="image">The Image component to set transparent.</param>
+        private void SetTransparent(Image image)
         {
-            StartColorTransition(image, activatedColor, transitionTime);
-        }
-        else
-        {
-            StartColorTransition(image, disabledColor, transitionTime);
-        }
-    }
+            if (image == null) return;
 
-    #endregion
-
-    #region === Cleanup / Utility ===
-
-    /// <summary>
-    /// Centralized cleanup method used by OnDisable and OnDestroy.
-    /// Ensures event subscriptions, bindings, and coroutines are properly released.
-    /// </summary>
-    private void OnClean()
-    {
-        onDeviceChange -= OnDeviceChange; // Stop listening for device changes.
-        UnbindAllEvents(); // Remove all input event bindings.
-        StopAllColorTransitions(); // Stop any ongoing color animations.
-    }
-
-    /// <summary>
-    /// Unbinds all input events from both single input viewers and multiple views input data.
-    /// Ensures that no event callbacks remain registered to prevent memory leaks or unintended behavior.
-    /// </summary>
-    private void UnbindAllEvents()
-    {
-        // Unbind events for single input viewer data.
-        foreach (var data in inputViewerData)
-        {
-            data.inputEvent?.Dispose();
+            // Set the color to activatedColor but fully transparent.
+            image.color = new Color(activatedColor.r, activatedColor.g, activatedColor.b, 0f);
+            image.gameObject.SetActive(false);
         }
 
-        // Unbind events for multiple views input data.
-        foreach (var data in inputMultipleViewsData)
+        /// <summary>
+        /// Activates or deactivates a directional icon by starting a color transition.
+        /// Uses activatedColor if active is true; otherwise disabledColor.
+        /// </summary>
+        /// <param name="image">The directional Image icon to update.</param>
+        /// <param name="active">True to activate; false to deactivate.</param>
+        private void SetDirectionActive(Image image, bool active)
         {
-            data.inputEvent?.Dispose();
-        }
-    }
+            if (image == null) return;
 
-    /// <summary>
-    /// Stops all ongoing color transition coroutines and clears the tracking dictionary.
-    /// Used typically during cleanup to avoid dangling coroutines.
-    /// </summary>
-    private void StopAllColorTransitions()
-    {
-        foreach (var coroutine in colorTransitions.Values)
+            if (active)
+            {
+                StartColorTransition(image, activatedColor, transitionTime);
+            }
+            else
+            {
+                StartColorTransition(image, disabledColor, transitionTime);
+            }
+        }
+
+        #endregion
+
+        #region === Cleanup / Utility ===
+
+        /// <summary>
+        /// Centralized cleanup method used by OnDisable and OnDestroy.
+        /// Ensures event subscriptions, bindings, and coroutines are properly released.
+        /// </summary>
+        private void OnClean()
         {
-            if (coroutine != null) StopCoroutine(coroutine);
+            onDeviceChange -= OnDeviceChange; // Stop listening for device changes.
+            UnbindAllEvents(); // Remove all input event bindings.
+            StopAllColorTransitions(); // Stop any ongoing color animations.
         }
-        colorTransitions.Clear();
-    }
 
-    #endregion
+        /// <summary>
+        /// Unbinds all input events from both single input viewers and multiple views input data.
+        /// Ensures that no event callbacks remain registered to prevent memory leaks or unintended behavior.
+        /// </summary>
+        private void UnbindAllEvents()
+        {
+            // Unbind events for single input viewer data.
+            foreach (var data in inputViewerData)
+            {
+                data.inputEvent?.Dispose();
+            }
+
+            // Unbind events for multiple views input data.
+            foreach (var data in inputMultipleViewsData)
+            {
+                data.inputEvent?.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// Stops all ongoing color transition coroutines and clears the tracking dictionary.
+        /// Used typically during cleanup to avoid dangling coroutines.
+        /// </summary>
+        private void StopAllColorTransitions()
+        {
+            foreach (var coroutine in colorTransitions.Values)
+            {
+                if (coroutine != null) StopCoroutine(coroutine);
+            }
+            colorTransitions.Clear();
+        }
+
+        #endregion
+    }
 }

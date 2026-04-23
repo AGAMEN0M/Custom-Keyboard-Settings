@@ -16,7 +16,7 @@ using UnityEngine;
 using System.IO;
 using System;
 
-namespace InputSystemExtension
+namespace InputSystemExtension.Editor
 {
     /// <summary>
     /// Utility class to create and instantiate predefined UI prefab objects related to Input System Extension.
@@ -67,11 +67,16 @@ namespace InputSystemExtension
         private static void CreateAndConfigurePrefab(string fileName, GameObject selectedGameObject, bool isUI = false)
         {
             // Try to find or create a Canvas if this is a UI prefab.
-#pragma warning disable
-#pragma warning disable UNT0007
-            var canvas = isUI ? UnityEngine.Object.FindAnyObjectByType<Canvas>() ?? CreateUICanvas() : null;
-#pragma warning restore UNT0007
-#pragma warning restore
+            Canvas canvas = null;
+
+            if (isUI)
+            {
+                // Try to find an existing Canvas in the scene.
+                canvas = UnityEngine.Object.FindAnyObjectByType<Canvas>();
+
+                // If none is found, create a new one.
+                if (canvas == null) canvas = CreateUICanvas();
+            }
 
             // Find the prefab asset in the project.
             var prefab = FindPrefabByName(fileName);
@@ -92,26 +97,38 @@ namespace InputSystemExtension
         }
 
         /// <summary>
-        /// Searches the project for a prefab by name.
+        /// Searches the project for a prefab by name, restricting the search
+        /// to the "Input System Extension/Prefab" directory for safety.
         /// </summary>
         /// <param name="prefabName">Name of the prefab (without extension).</param>
         /// <returns>The prefab GameObject asset, or null if not found.</returns>
         public static GameObject FindPrefabByName(string prefabName)
         {
             // Find all prefab assets matching the name.
-            string[] guids = AssetDatabase.FindAssets($"{prefabName} t:Prefab");
+            var guids = AssetDatabase.FindAssets($"{prefabName} t:Prefab");
 
-            foreach (string guid in guids)
+            foreach (var guid in guids)
             {
+                // Convert GUID to asset path.
                 string path = AssetDatabase.GUIDToAssetPath(guid);
 
-                if (Path.GetFileNameWithoutExtension(path).Equals(prefabName, StringComparison.OrdinalIgnoreCase))
+                // Normalize path to use forward slashes.
+                string normalizedPath = path.Replace("\\", "/");
+
+                // Ensure the prefab is inside the allowed directory.
+                if (!normalizedPath.Contains("Input System Extension/Prefab"))
                 {
-                    return AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                    continue; // Skip anything outside the safe folder.
+                }
+
+                // Check if the file name matches exactly (case-insensitive).
+                if (Path.GetFileNameWithoutExtension(normalizedPath).Equals(prefabName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return AssetDatabase.LoadAssetAtPath<GameObject>(normalizedPath);
                 }
             }
 
-            Debug.LogError($"Prefab with the name '{prefabName}' not found.");
+            Debug.LogError($"Prefab with the name '{prefabName}' not found in 'Input System Extension/Prefab'.");
             return null;
         }
 
@@ -154,47 +171,32 @@ namespace InputSystemExtension
         /// <summary>
         /// Adds a menu option to instantiate the "Rebind Control Manager (Legacy)" UI prefab.
         /// </summary>
-        [MenuItem("GameObject/UI/Input System Extension/Rebind Control Manager (Legacy)", false, 1)]
-        public static void CreateRebindControlManagerPrefab()
-        {
-            CreateAndConfigurePrefab("Rebind Control Manager (Legacy)", Selection.activeGameObject, true);
-        }
-
-        /// <summary>
-        /// Adds a menu option to instantiate the "Rebind Control Manager (TMP)" UI prefab.
-        /// </summary>
-        [MenuItem("GameObject/UI/Input System Extension/Rebind Control Manager (TMP)", false, 2)]
-        public static void CreateRebindControlManagerTMPPrefab()
-        {
-            CreateAndConfigurePrefab("Rebind Control Manager (TMP)", Selection.activeGameObject, true);
-        }
+        [MenuItem("GameObject/Tools/Input System Extension/UI/Legacy/Rebind Control Manager (Legacy)")]
+        public static void CreateRebindControlManagerPrefab() => CreateAndConfigurePrefab("Rebind Control Manager (Legacy)", Selection.activeGameObject, true);
 
         /// <summary>
         /// Adds a menu option to instantiate the "Button (Reset All) [Legacy]" UI prefab.
         /// </summary>
-        [MenuItem("GameObject/UI/Input System Extension/Button (Reset All) [Legacy]", false, 3)]
-        public static void CreateButtonResetAllPrefab()
-        {
-            CreateAndConfigurePrefab("Button (Reset All) [Legacy]", Selection.activeGameObject, true);
-        }
+        [MenuItem("GameObject/Tools/Input System Extension/UI/Legacy/Button (Reset All) [Legacy]")]
+        public static void CreateButtonResetAllPrefab() => CreateAndConfigurePrefab("Button (Reset All) [Legacy]", Selection.activeGameObject, true);
+
+        /// <summary>
+        /// Adds a menu option to instantiate the "Rebind Control Manager (TMP)" UI prefab.
+        /// </summary>
+        [MenuItem("GameObject/Tools/Input System Extension/UI/Rebind Control Manager (TMP)")]
+        public static void CreateRebindControlManagerTMPPrefab() => CreateAndConfigurePrefab("Rebind Control Manager (TMP)", Selection.activeGameObject, true);
 
         /// <summary>
         /// Adds a menu option to instantiate the "Button (Reset All) [TMP]" UI prefab.
         /// </summary>
-        [MenuItem("GameObject/UI/Input System Extension/Button (Reset All) [TMP]", false, 4)]
-        public static void CreateButtonResetAllTMPPrefab()
-        {
-            CreateAndConfigurePrefab("Button (Reset All) [TMP]", Selection.activeGameObject, true);
-        }
+        [MenuItem("GameObject/Tools/Input System Extension/UI/Button (Reset All) [TMP]")]
+        public static void CreateButtonResetAllTMPPrefab() => CreateAndConfigurePrefab("Button (Reset All) [TMP]", Selection.activeGameObject, true);
 
         /// <summary>
         /// Adds a menu option to instantiate the "Input Display Manager" UI prefab.
         /// </summary>
-        [MenuItem("GameObject/UI/Input System Extension/Input Display Manager", false, 5)]
-        public static void CreateInputDisplayManagerPrefab()
-        {
-            CreateAndConfigurePrefab("Input Display Manager", Selection.activeGameObject, true);
-        }
+        [MenuItem("GameObject/Tools/Input System Extension/UI/Input Display Manager")]
+        public static void CreateInputDisplayManagerPrefab() => CreateAndConfigurePrefab("Input Display Manager", Selection.activeGameObject, true);
 
         #endregion
     }

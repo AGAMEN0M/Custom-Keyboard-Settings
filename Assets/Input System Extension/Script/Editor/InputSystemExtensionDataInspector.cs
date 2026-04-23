@@ -16,7 +16,7 @@ using UnityEngine;
 
 using static InputSystemExtension.InputSystemExtensionData;
 
-namespace InputSystemExtension
+namespace InputSystemExtension.Editor
 {
     /// <summary>
     /// Custom inspector for InputSystemExtensionData with support for multi-object editing.
@@ -24,7 +24,7 @@ namespace InputSystemExtension
     /// </summary>
     [CanEditMultipleObjects]
     [CustomEditor(typeof(InputSystemExtensionData))]
-    public class InputSystemExtensionDataInspector : Editor
+    public class InputSystemExtensionDataInspector : UnityEditor.Editor
     {
         #region === Inspector GUI ===
 
@@ -36,7 +36,7 @@ namespace InputSystemExtension
             serializedObject.Update(); // Updates the serialized data.
 
             // Button that applies the mapping to all selected objects.
-            if (GUILayout.Button("Get Default Icons", GUILayout.Height(30)))
+            if (GUILayout.Button(new GUIContent("Get Default Icons", "Automatically generates default keyboard and gamepad icon mappings."), GUILayout.Height(30)))
             {
                 foreach (var targetObject in targets)
                 {
@@ -62,7 +62,7 @@ namespace InputSystemExtension
         /// as well as basic keyboard key sprite mappings.
         /// </summary>
         /// <param name="script">The target ScriptableObject to populate.</param>
-        private static void GenerateKeyCodeList(InputSystemExtensionData script)
+        public static void GenerateKeyCodeList(InputSystemExtensionData script)
         {
             script.KeyCodes.Clear(); // Clears existing keyboard mappings.
             var sprite = script.defaultSprite; // Uses the default keyboard sprite as a fallback.
@@ -92,7 +92,7 @@ namespace InputSystemExtension
             };
 
             // Initializes PS4 gamepad icons using predefined sprite names.
-            script.ps4 = new GamepadIcons
+            script.ps = new GamepadIcons
             {
                 buttonSouth = GetSprite("PS4_Cross", sprite),
                 buttonNorth = GetSprite("PS4_Triangle", sprite),
@@ -116,7 +116,8 @@ namespace InputSystemExtension
             };
 
             // Creates a predefined list of keyboard key to sprite mappings.
-            var keyCodeList = new List<InputSpriteList> {
+            var keyCodeList = new List<InputSpriteList> 
+            {
                 new() { keyCode = KeyCode.None, keyName = "", sprite = GetSprite("None", sprite) },
                 new() { keyCode = KeyCode.Backspace, keyName = "<Keyboard>/backspace", sprite = GetSprite("Backspace", sprite) },
                 new() { keyCode = KeyCode.Delete, keyName = "<Keyboard>/delete", sprite = GetSprite("Delete", sprite) },

@@ -1,8 +1,7 @@
 /*
  * ---------------------------------------------------------------------------
  * Description: ScriptableObject configuration for Input System Extension. 
- *              Stores binding settings, gamepad icons, and provides editor 
- *              access via menu for centralized input management.
+ *              Stores binding settings, gamepad icons.
  * 
  * Author: Lucas Gomes Cecchini
  * Pseudonym: AGAMENOM
@@ -14,15 +13,8 @@ using UnityEngine.InputSystem;
 using UnityEngine;
 using System;
 
-#if UNITY_EDITOR
-using System.Linq;
-using UnityEditor;
-#endif
-
 namespace InputSystemExtension
 {
-    #region === Input System Extension Data ===
-
     /// <summary>
     /// Stores configuration data for the input system, including custom binding persistence
     /// and gamepad icon mappings for visual representation in the UI.
@@ -54,8 +46,8 @@ namespace InputSystemExtension
         [Tooltip("Set of sprites for Xbox-style gamepads (A, B, X, Y, triggers, etc.).")]
         public GamepadIcons xbox;
 
-        [Tooltip("Set of sprites for PS4 (DualShock)-style gamepads (Cross, Circle, Square, Triangle, etc.).")]
-        public GamepadIcons ps4;
+        [Tooltip("Set of sprites for PS (DualShock)-style gamepads (Cross, Circle, Square, Triangle, etc.).")]
+        public GamepadIcons ps;
 
         #endregion
 
@@ -68,13 +60,13 @@ namespace InputSystemExtension
         public struct InputSpriteList
         {
             [Tooltip("KeyCode associated with this sprite.")]
-            public KeyCode keyCode; // The KeyCode associated with this sprite.
+            public KeyCode keyCode;
 
             [Tooltip("Name of the key used by the Input Action")]
-            public string keyName; // Key name.
+            public string keyName;
 
             [Tooltip("Sprite representing this specific key visually.")]
-            public Sprite sprite; // The Sprite that represents the key visually.
+            public Sprite sprite;
         }
 
         #endregion
@@ -88,7 +80,7 @@ namespace InputSystemExtension
         [Serializable]
         public struct GamepadIcons
         {
-            // === Face Buttons ===
+            [Header("Face Buttons")]
             [Tooltip("Sprite for the South button (A / Cross).")]
             public Sprite buttonSouth;
 
@@ -101,14 +93,14 @@ namespace InputSystemExtension
             [Tooltip("Sprite for the West button (X / Square).")]
             public Sprite buttonWest;
 
-            // === Menu Buttons ===
+            [Header("Menu Buttons")]
             [Tooltip("Sprite for the Start or Options button.")]
             public Sprite startButton;
 
             [Tooltip("Sprite for the Select or Share button.")]
             public Sprite selectButton;
 
-            // === Triggers and Bumpers ===
+            [Header("Triggers and Bumpers")]
             [Tooltip("Sprite for the Left Trigger (LT / L2).")]
             public Sprite leftTrigger;
 
@@ -121,7 +113,7 @@ namespace InputSystemExtension
             [Tooltip("Sprite for the Right Shoulder (RB / R1).")]
             public Sprite rightShoulder;
 
-            // === D-Pad ===
+            [Header("D-Pad")]
             [Tooltip("Sprite representing the full D-Pad.")]
             public Sprite dpad;
 
@@ -137,7 +129,7 @@ namespace InputSystemExtension
             [Tooltip("Sprite representing the D-Pad Right direction.")]
             public Sprite dpadRight;
 
-            // === Analog Sticks ===
+            [Header("Analog Sticks")]
             [Tooltip("Sprite representing the Left Stick.")]
             public Sprite leftStick;
 
@@ -195,46 +187,4 @@ namespace InputSystemExtension
         }
         #endregion
     }
-
-    #endregion
-
-#if UNITY_EDITOR
-
-    #region === Editor Integration ===
-
-    /// <summary>
-    /// Adds a menu option in the Unity Editor to open the InputSystemExtensionData asset via property inspector.
-    /// </summary>
-    public static class InputSystemExtensionDataWindow
-    {
-        [MenuItem("Window/Input System Extension/Input System Extension Data")]
-        public static void OpenInputSystemExtensionData()
-        {
-            // Attempt to load the asset using the helper.
-            var settingsData = InputSystemExtensionHelper.GetInputSystemExtensionData();
-
-            if (settingsData != null)
-            {
-                // Check if an inspector window is already open for the asset.
-                var existingWindow = Resources.FindObjectsOfTypeAll<EditorWindow>().FirstOrDefault(window => window.titleContent.text == settingsData.name);
-
-                if (existingWindow != null)
-                {
-                    existingWindow.Focus();
-                }
-                else
-                {
-                    EditorUtility.OpenPropertyEditor(settingsData); // Open the asset in the default Unity inspector.
-                }
-            }
-            else
-            {
-                Debug.LogError("Failed to find or load InputSystemExtensionData. Ensure that the ScriptableObject exists and is properly referenced.");
-            }
-        }
-    }
-
-    #endregion
-
-#endif
 }
