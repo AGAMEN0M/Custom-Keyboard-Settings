@@ -6,9 +6,11 @@ A flexible and scalable input framework for Unity built on top of the **New Inpu
 
 ## 📦 Download
 
-[Input System Extension - Package v0.0.4](https://drive.google.com/file/d/1cGOsVRLhczhDOlkHYGF7uKJJ5M77i_SJ/view?usp=drive_link)
+[Unity Asset Store]()
+
+[Input System Extension - Package v0.0.4](https://github.com/AGAMEN0M/Input-System-Extension/releases/download/v0.0.4/Input.System.Extension.-.by.Lucas_AGAMENOM.unitypackage)
 /
-[Documentation](https://drive.google.com/file/d/1QG0QRXzMXqneKkG6jtITSs9xk-9G7YB3/view?usp=drive_link)
+[Documentation](https://github.com/user-attachments/files/30385499/Input.System.Extension.Documentation.pdf)
 
 ---
 
@@ -160,7 +162,7 @@ If you encounter bugs or have suggestions, feel free to open an issue or reach o
 
 ## 📁 Legacy Versions
 
-[Old Versions - Package](https://drive.google.com/drive/folders/1882_aAK2gTwdIFMDfoZKAeK-3r-N3Z_2?usp=drive_link)
+[Old Versions - Package](https://github.com/AGAMEN0M/Input-System-Extension/releases)
 
 ---
 
